@@ -102,8 +102,8 @@
 #define TX_BUF_LEN  16  // byte
 #define RX_BUF_LEN  32  // byte
 
-extern void nrfBeginRX(void);
-extern void nrfBeginTX(void);
+extern void nrfBeginRX(int channel);
+extern void nrfBeginTX(int channel);
 extern void nrfSend(char* payload);
 extern unsigned char* nrfReceive(void);
 extern int nrfAvailable(void);

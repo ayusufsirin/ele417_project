@@ -58,19 +58,19 @@ void Instruction_Byte_MSB_First(int content);
 void Read_Byte_MSB_First(int index, unsigned char regname[]);
 void Write_Byte_MSB_First(unsigned char content[], int index2);
 void Write_Payload_MSB_First(int pyld[], int index3);
-void init(unsigned char config_register[]);
+void init(unsigned char config_register[], int channel);
 void ch_ptr_2_int_ptr(const char *charPtr, unsigned int size, int *intPtr);
 
-void nrfBeginRX(void)
+void nrfBeginRX(int channel)
 {
     unsigned char configregister[1] = { RX_CONFIG_REG };
-    init(configregister);
+    init(configregister, channel);
 }
 
-void nrfBeginTX(void)
+void nrfBeginTX(int channel)
 {
     unsigned char configregister[1] = { TX_CONFIG_REG };
-    init(configregister);
+    init(configregister, channel);
 }
 
 void nrfSend(char *payload)
@@ -169,7 +169,7 @@ unsigned char* nrfReceive(void)
     return read_PAYLOAD;
 }
 
-void init(unsigned char config_register[])
+void init(unsigned char config_register[], int channel)
 {
     // Pin Setup
     P2DIR |= OUT_PIN_MASK;
@@ -204,7 +204,7 @@ void init(unsigned char config_register[])
     CSN_On();
     //RF_CH
     CSN_Off();
-    Instruction_Byte_MSB_First(W_REGISTER | RF_CH);
+    Instruction_Byte_MSB_First(W_REGISTER | channel);
     Write_Byte_MSB_First(rf_chanregister, 1);
     CSN_On();
     //SETUP_RETR
