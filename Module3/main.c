@@ -12,6 +12,8 @@
 #define FRAME_DATA_LEN      TX_BUF_LEN - sizeof(unsigned char)
 #define FRAME_NUMBER        3
 
+#define NRF_CH 5
+
 struct Message
 {
     float icTemperature;  // internal msp430 thermistor
@@ -40,7 +42,7 @@ int main(void)
     WDTCTL = WDTPW | WDTHOLD;	// stop watchdog timer
 
     serialBegin(9600);
-    nrfBeginRX();
+    nrfBeginRX(NRF_CH);
 
     initLCD();
     hd44780_clear_screen();
@@ -58,6 +60,9 @@ int main(void)
         if (nrfAvailable() > 0)
         {
             frame = (struct Frame*) (payload + TX_BUF_LEN);
+
+            if (frame->index >= FRAME_NUMBER)
+                continue;
 
             unsigned int j;
             for (j = 0; j < FRAME_DATA_LEN; j++)

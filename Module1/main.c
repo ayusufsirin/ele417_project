@@ -6,10 +6,16 @@
 #include <nrf24l01.h>
 #include <uart.h>
 #include <nmea_gps.h>
+#include <aes.h>
 
+#define NRF_CH 3
 #define UART_BAUD           9600
 #define FRAME_DATA_LEN      TX_BUF_LEN - sizeof(unsigned char)
 #define FRAME_NUMBER        3  // 1 + (sizeof(struct Message) - 1) / FRAME_DATA_LEN
+
+#define MODULE_1_IP 0x10
+#define MODULE_2_IP 0x20
+#define MODULE_3_IP 0x30
 
 struct Message
 {
@@ -19,16 +25,17 @@ struct Message
 
 struct Frame
 {
-    unsigned char index;  // (1 Byte) 0-255 frame numbers
+    unsigned char index;  // HN: Address, LN: Frame number
     char data[FRAME_DATA_LEN];
 };
 
 char gpsBuffer[NMEA_SENT_LEN];
 unsigned int gpsBufferIndex = 0;
 
+struct Frame frame;
 struct Message msg;
 char *msgBuffer;
-struct Frame frame;
+char payload[] = "qwertyuiopasdfg";
 
 // Array manipulation functions
 void ch_arr_cpy(char *dest, const char *src, int startIndex, int endIndex);
@@ -37,22 +44,32 @@ int main(void)
 {
     WDTCTL = WDTPW | WDTHOLD;	// stop watchdog timer
 
+    struct AES_ctx ctx;
+    uint8_t key[] = "PraiseBeToAllah";
+    uint8_t iv[] = "TheMostMerciful";
+
+    AES_init_ctx_iv(&ctx, key, iv);
+
     serialBegin(UART_BAUD);
-    nrfBeginTX();
+    nrfBeginTX(NRF_CH);
 
     while (1)
     {
         msg.icTemperature = 2.9f;
         msgBuffer = (char*) &msg;
 
-        unsigned char fi;  // frame index (8 bits)
+        unsigned char fi;  // frame index (4 bits)
         for (fi = 0; fi < FRAME_NUMBER; fi++)
         {
+//            frame.index = (fi & 0x0F) | 0x20;
             frame.index = fi;
             ch_arr_cpy(frame.data, msgBuffer, fi * FRAME_DATA_LEN,
                        (fi + 1) * FRAME_DATA_LEN - 1);
-            nrfSend((char*) &frame);
-//            _delay_cycles(100000);
+
+            ch_arr_cpy(payload, (char*) &frame, 0, TX_BUF_LEN);
+
+            AES_CBC_encrypt_buffer(&ctx, (uint8_t*) payload, TX_BUF_LEN);
+            nrfSend(payload);
         }
     }
 }
