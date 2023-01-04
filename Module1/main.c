@@ -9,7 +9,7 @@
 
 #define UART_BAUD           9600
 #define FRAME_DATA_LEN      TX_BUF_LEN - sizeof(unsigned char)
-#define FRAME_NUMBER        3  // (int) ceil(((double) sizeof(struct Message)) / FRAME_DATA_LEN)
+#define FRAME_NUMBER        3  // 1 + (sizeof(struct Message) - 1) / FRAME_DATA_LEN
 
 struct Message
 {
@@ -19,11 +19,11 @@ struct Message
 
 struct Frame
 {
-    unsigned char index;  // 0-255 frame numbers
+    unsigned char index;  // (1 Byte) 0-255 frame numbers
     char data[FRAME_DATA_LEN];
 };
 
-char gpsBuffer[NMEA_SENT_LEN] = "qwertyuiopasdfg";
+char gpsBuffer[NMEA_SENT_LEN];
 unsigned int gpsBufferIndex = 0;
 
 struct Message msg;
@@ -45,14 +45,14 @@ int main(void)
         msg.icTemperature = 2.9f;
         msgBuffer = (char*) &msg;
 
-        unsigned char fi;  // frame index
+        unsigned char fi;  // frame index (8 bits)
         for (fi = 0; fi < FRAME_NUMBER; fi++)
         {
             frame.index = fi;
             ch_arr_cpy(frame.data, msgBuffer, fi * FRAME_DATA_LEN,
                        (fi + 1) * FRAME_DATA_LEN - 1);
             nrfSend((char*) &frame);
-            _delay_cycles(100000);
+//            _delay_cycles(100000);
         }
     }
 }
