@@ -51,8 +51,8 @@
  * Applies only to USCI devices.  USI users can keep these
  * commented out.
  */
-#define SPI_DRIVER_USCI_A 1
-//#define SPI_DRIVER_USCI_B 1
+//#define SPI_DRIVER_USCI_A 1
+#define SPI_DRIVER_USCI_B 1
 
 
 /* Operational pins -- IRQ, CE, CSN (SPI chip-select)

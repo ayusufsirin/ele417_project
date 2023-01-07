@@ -1,18 +1,15 @@
-#include <stdio.h>
-
 #include <msp430.h>
-#include <hd44780.h>
-#include <nrf24l01.h>
-#include <uart.h>
-#include <nmea_gps.h>
+#include <stdio.h>
+#include <stdint.h>
 
-#define LCD_DB_MASK     (BIT4 + BIT5 + BIT6 + BIT7)  // P1.4 (D4) to P1.7 (D7)
-#define LCD_CTL_MASK    (BIT0 + BIT3)                // P1.6 (E) and P1.7 (RS)
+#include "msprf24.h"
+#include "nrf_userconfig.h"
+#include "hd44780.h"
+#include "uart.h"
+#include "nmea_gps.h"
+#include "utils.h"
 
-#define FRAME_DATA_LEN      TX_BUF_LEN - sizeof(unsigned char)
-#define FRAME_NUMBER        3
-
-#define NRF_CH 5
+#define UART_BAUD           9600
 
 struct Message
 {
@@ -20,34 +17,31 @@ struct Message
     struct GPS gps;  // external uart gps module
 };
 
-struct Frame
-{
-    unsigned char index;  // 0-255 frame numbers
-    char data[FRAME_DATA_LEN];
-};
-
 struct Frame *frame;
-
 struct Message *msg;
-unsigned char msgBuffer[sizeof(struct Message)];
-unsigned msgBufferIndex = 0;
 
+unsigned char msgBuffer[sizeof(struct Message)];
+uint8_t buf[BUF_SIZE];
 char lcdStr[32];
 
-void initLCD(void);
-void ch_arr_cpy(char *dest, const char *src, int startIndex, int endIndex);
+void lcdInit(void);
+void nrfInit(void);
 
 int main(void)
 {
     WDTCTL = WDTPW | WDTHOLD;	// stop watchdog timer
 
-    serialBegin(9600);
-    nrfBeginRX(NRF_CH);
+    serialBegin(UART_BAUD);
+    lcdInit();
+    nrfInit();
 
-    initLCD();
+    if (!(RF24_QUEUE_RXEMPTY & msprf24_queue_state()))
+    {
+        flush_rx();
+    }
+    msprf24_activate_rx();
+
     hd44780_clear_screen();
-
-    unsigned char *payload;
 
     while (1)
     {
@@ -56,55 +50,65 @@ int main(void)
                 (int) msg->gps.longitude, msg->gps.e_w);
         hd44780_write_string(lcdStr, 1, 1, CR_LF);
 
-        payload = nrfReceive();
-        if (nrfAvailable() > 0)
+        if (rf_irq & RF24_IRQ_FLAGGED)
         {
-            frame = (struct Frame*) (payload + TX_BUF_LEN);
+            msprf24_get_irq_reason();
+        }
 
-            if (frame->index >= FRAME_NUMBER)
-                continue;
+        if (rf_irq & RF24_IRQ_RX)
+        {
+            r_rx_payload(BUF_SIZE, buf);
+            msprf24_irq_clear(RF24_IRQ_RX);
 
-            unsigned int j;
-            for (j = 0; j < FRAME_DATA_LEN; j++)
+            frame = (struct Frame*) buf;
+
+            if (frame->index < FRAME_NUMBER)
             {
-                msgBuffer[frame->index * FRAME_DATA_LEN + j] = frame->data[j];
-            }
+                unsigned int i;
+                for (i = 0; i < FRAME_DATA_LEN; i++)
+                {
+                    msgBuffer[frame->index * FRAME_DATA_LEN + i] =
+                            frame->data[i];
+                }
 
-            msg = (struct Message*) msgBuffer;
-
-            unsigned int i;
-            for (i = TX_BUF_LEN; i < RX_BUF_LEN; i++)
-            {
-                while (serialAvailable() == 0)
-                    ;
-                serialWrite(payload[i]);
+                msg = (struct Message*) msgBuffer;
             }
         }
     }
 }
 
-void initLCD(void)
+void nrfInit(void)
+{
+    DCOCTL = CALDCO_1MHZ;
+    BCSCTL1 = CALBC1_1MHZ;
+
+    rf_crc = RF24_EN_CRC | RF24_CRCO;
+    rf_addr_width = 5;
+    rf_speed_power = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
+    rf_channel = 120;
+
+    msprf24_init();
+    msprf24_set_pipe_packetsize(0, BUF_SIZE);
+    msprf24_open_pipe(0, 1);
+
+    // Address setup
+    uint8_t addr[5] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01 };
+    w_rx_addr(0, addr);
+}
+
+void lcdInit(void)
 {
     BCSCTL1 = CALBC1_1MHZ;
     DCOCTL = CALDCO_1MHZ;
 
-    P1DIR |= LCD_DB_MASK;
-    P1DIR |= LCD_CTL_MASK;
+    P1DIR |= BIT0 | BIT3 | BIT4;
+    P2DIR |= BIT3 | BIT4 | BIT5;
 
-    TA0CCR1 = 5000;                   // Set CCR1 value for 32.678 ms interrupt
+    TA0CCR1 = 5000;                    // Set CCR1 value for 32.678 ms interrupt
     TA0CCTL1 = CCIE;                   // Compare interrupt enable
     TA0CTL = TASSEL_2 | MC_2 | TACLR;  // SMCLK, Continuous mode
 
     _enable_interrupts();
-}
-
-void ch_arr_cpy(char *dest, const char *src, int startIndex, int endIndex)
-{
-    unsigned int i;
-    for (i = 0; i < (endIndex - startIndex); i++)
-    {
-        dest[i] = src[i + startIndex];
-    }
 }
 
 #pragma vector = TIMER0_A1_VECTOR
