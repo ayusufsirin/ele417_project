@@ -22,10 +22,13 @@ struct Message *msg;
 
 unsigned char msgBuffer[sizeof(struct Message)];
 uint8_t buf[BUF_SIZE];
-char lcdStr[32];
 
-void lcdInit(void);
+char lcdStr1[17];
+char lcdStr2[40];
+
 void nrfInit(void);
+void lcdInit(void);
+void lcdStrFormat(struct Message *msg);
 
 int main(void)
 {
@@ -45,10 +48,10 @@ int main(void)
 
     while (1)
     {
-        sprintf(lcdStr, "D:%dT%d La:%d%c Lo:%d%c", (int) msg->gps.date,
-                (int) msg->gps.time, (int) msg->gps.latitude, msg->gps.n_s,
-                (int) msg->gps.longitude, msg->gps.e_w);
-        hd44780_write_string(lcdStr, 1, 1, CR_LF);
+        lcdStrFormat(msg);
+//        circular_shift_left(lcdStr2, 1);
+        hd44780_write_string(lcdStr1, 1, 1, NO_CR_LF);
+        hd44780_write_string(lcdStr2, 2, 1, NO_CR_LF);
 
         if (rf_irq & RF24_IRQ_FLAGGED)
         {
@@ -98,24 +101,37 @@ void nrfInit(void)
 
 void lcdInit(void)
 {
-    BCSCTL1 = CALBC1_1MHZ;
-    DCOCTL = CALDCO_1MHZ;
-
     P1DIR |= BIT0 | BIT3 | BIT4;
     P2DIR |= BIT3 | BIT4 | BIT5;
 
-    TA0CCR1 = 5000;                    // Set CCR1 value for 32.678 ms interrupt
-    TA0CCTL1 = CCIE;                   // Compare interrupt enable
-    TA0CTL = TASSEL_2 | MC_2 | TACLR;  // SMCLK, Continuous mode
+    TA0CTL = TASSEL_1 | MC_1 | ID_0 | TACLR;  // ACLK, Up-to-CCR mode
+    TA0CCR0 = 500;
+    TA0CCTL0 = CCIE;  // Compare interrupt enable
 
-    _enable_interrupts();
+    __enable_interrupt();
 }
 
-#pragma vector = TIMER0_A1_VECTOR
-__interrupt void TIMER0_A1_ISR(void)            // Timer 0 A1 interrupt service
+void lcdStrFormat(struct Message *msg)
 {
-    if (TA0IV == 2)  // Determine the interrupt source
-    {
-        hd44780_timer_isr();                       // Call HD44780 state machine
-    }
+    char date[9];
+    char time[7];
+    char latitude[12];
+    char longitude[12];
+
+    date_string(msg->gps.date, date);
+    time_string(msg->gps.time, time);
+    lat_long_string(msg->gps.latitude, latitude);
+    lat_long_string(msg->gps.longitude, longitude);
+
+    sprintf(lcdStr1, "%s   %s", date, time);
+    sprintf(lcdStr2, "%s%c%s%c", latitude, msg->gps.n_s, longitude,
+            msg->gps.e_w);
+}
+
+// Timer_A interrupt service routine for TA0CCR0
+#pragma vector = TIMER0_A0_VECTOR
+__interrupt void Timer_A0(void)
+{
+    hd44780_timer_isr();  // Call HD44780 state machine
+    TA0CCTL0 &= ~CCIFG;  // Clear the interrupt flag
 }

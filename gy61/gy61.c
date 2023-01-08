@@ -6,7 +6,7 @@
  */
 
 #include <msp430.h> 
-#include "include/gy61.h"
+#include "gy61.h"
 
 void gy61Init(void){
     BCSCTL1 = CALBC1_8MHZ;  //Set DCO to 8Mhz
@@ -17,7 +17,7 @@ void gy61Init(void){
     _enable_interrupts();
 }
 
-void gy61Read(int x, int y, int z)
+void gy61Read(int *x, int *y, int *z)
 {
     ADC10CTL1 = INCH_3 + ADC10DIV_3;
     ADC10CTL0 = SREF_0 + ADC10SHT_3 + ADC10ON + ADC10IE;
