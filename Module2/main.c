@@ -55,8 +55,8 @@ int main(void)
              * waiting for ACK because no need. There is
              * no public key sharing for encryption.
              */
-//            w_tx_payload_noack(BUF_SIZE, (uint8_t*) &frame);
-            w_tx_payload(BUF_SIZE, (uint8_t*) &frame);
+            w_tx_payload_noack(BUF_SIZE, (uint8_t*) frame);
+//            w_tx_payload(BUF_SIZE, (uint8_t*) &frame);
             msprf24_activate_tx();
             msprf24_activate_rx();
 
