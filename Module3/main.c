@@ -9,7 +9,7 @@
 #include "nmea_gps.h"
 #include "utils.h"
 
-#define UART_BAUD           9600
+#define UART_BAUD 9600
 
 struct Message
 {
@@ -104,7 +104,7 @@ void lcdInit(void)
     P1DIR |= BIT0 | BIT3 | BIT4;
     P2DIR |= BIT3 | BIT4 | BIT5;
 
-    TA0CTL = TASSEL_1 | MC_1 | ID_0 | TACLR;  // ACLK, Up-to-CCR mode
+    TA0CTL = TASSEL_2 | MC_1 | ID_0 | TACLR;  // ACLK, Up-to-CCR mode
     TA0CCR0 = 500;
     TA0CCTL0 = CCIE;  // Compare interrupt enable
 
