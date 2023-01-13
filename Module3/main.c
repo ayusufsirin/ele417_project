@@ -88,7 +88,7 @@ void nrfInit(void)
     rf_crc = RF24_EN_CRC | RF24_CRCO;
     rf_addr_width = 5;
     rf_speed_power = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
-    rf_channel = 99;
+    rf_channel = NRF_CHANNEL;
 
     msprf24_init();
     msprf24_set_pipe_packetsize(0, BUF_SIZE);
