@@ -12,6 +12,8 @@
 #define FRAME_DATA_LEN      16
 #define FRAME_NUMBER        3  // 1 + (sizeof(struct Message) - 1) / FRAME_DATA_LEN
 
+#define NRF_CHANNEL         99
+
 #define KEY "PraiseBeToAllah"
 #define IV  "TheMostMerciful"
 
