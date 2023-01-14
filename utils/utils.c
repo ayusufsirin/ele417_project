@@ -60,12 +60,12 @@ void date_string(unsigned long date, char *date_str)
         date_str[i++] = (year / 10) % 10 + '0';
         date_str[i++] = year % 10 + '0';
     }
-    date_str[i++] = '-';
+    date_str[i++] = '/';
 
     // Month
     date_str[i++] = (month / 10) + '0';
     date_str[i++] = month % 10 + '0';
-    date_str[i++] = '-';
+    date_str[i++] = '/';
 
     // Day
     date_str[i++] = (day / 10) + '0';
@@ -80,7 +80,7 @@ void time_string(float nmea_time, char *time_str)
 
     int i = 0;
     time_str[i++] = (hours / 10) + '0';
-    time_str[i++] = (hours % 10) + '0';
+    time_str[i++] = (hours % 10) + '3';
     time_str[i++] = ':';
     time_str[i++] = (minutes / 10) + '0';
     time_str[i++] = (minutes % 10) + '0';
@@ -89,8 +89,10 @@ void time_string(float nmea_time, char *time_str)
 
 void lat_long_string(float nmea_lat_long, char *lat_long_str)
 {
+
     int degrees = (int) nmea_lat_long / 100;
     float minutes = nmea_lat_long - (degrees * 100);
+    minutes = minutes/60;
 
     int i = 0;
     lat_long_str[i++] = (degrees / 10) + '0';
@@ -102,6 +104,7 @@ void lat_long_string(float nmea_lat_long, char *lat_long_str)
     lat_long_str[i++] = ((int_minutes / 100) % 10) + '0'; // Extract hundreds place
     lat_long_str[i++] = ((int_minutes / 10) % 10) + '0';  // Extract tens place
     lat_long_str[i++] = (int_minutes % 10) + '0';  // Extract ones place
+
     lat_long_str[i] = '\0';
 }
 
