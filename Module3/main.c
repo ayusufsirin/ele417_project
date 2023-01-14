@@ -20,7 +20,7 @@ struct Message
 struct Frame *frame;
 struct Message *msg;
 
-unsigned char msgBuffer[sizeof(struct Message)];
+unsigned char msgBuffer[sizeof(struct Message) + 1];  // +1 for null char
 uint8_t buf[BUF_SIZE];
 
 char lcdStr1[17];
@@ -49,9 +49,13 @@ int main(void)
     while (1)
     {
         lcdStrFormat(msg);
-//        circular_shift_left(lcdStr2, 1);
         hd44780_write_string(lcdStr1, 1, 1, NO_CR_LF);
         hd44780_write_string(lcdStr2, 2, 1, NO_CR_LF);
+
+        msgBuffer[sizeof(struct Message)] = '\0';
+        serialPrint("$");
+        serialPrint((char*) msgBuffer);
+        serialPrint("\r\n");
 
         if (rf_irq & RF24_IRQ_FLAGGED)
         {
@@ -115,8 +119,8 @@ void lcdStrFormat(struct Message *msg)
 {
     char date[9];
     char time[7];
-    char latitude[12];
-    char longitude[12];
+    char latitude[15];
+    char longitude[15];
 
     date_string(msg->gps.date, date);
     time_string(msg->gps.time, time);
