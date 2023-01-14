@@ -23,7 +23,7 @@ struct Message
 char gpsBuffer[NMEA_SENT_LEN];
 unsigned int gpsBufferIndex = 0;
 
-struct Frame frame;
+struct Packet packet;
 struct Message msg;
 
 char *msgBuffer;
@@ -51,16 +51,16 @@ int main(void)
         msgBuffer = (char*) &msg;
 
         unsigned char fi;  // frame index
-        for (fi = 0; fi < FRAME_NUMBER; fi++)
+        for (fi = 0; fi < PACKET_NUMBER; fi++)
         {
-            frame.index = fi;
-            ch_arr_cpy(frame.data, msgBuffer, fi * FRAME_DATA_LEN,
-                       (fi + 1) * FRAME_DATA_LEN);
+            packet.index = fi;
+            ch_arr_cpy(packet.payload, msgBuffer, fi * PACKET_PAYLOAD_LEN,
+                       (fi + 1) * PACKET_PAYLOAD_LEN);
 
             AES_init_ctx_iv(&ctx, key, iv);
-            AES_CBC_encrypt_buffer(&ctx, (uint8_t*) frame.data, FRAME_DATA_LEN);
+            AES_CBC_encrypt_buffer(&ctx, (uint8_t*) packet.payload, PACKET_PAYLOAD_LEN);
 
-            w_tx_payload(BUF_SIZE, (uint8_t*) &frame);  //(uint8_t*) &frame);
+            w_tx_payload(BUF_SIZE, (uint8_t*) &packet);  //(uint8_t*) &frame);
             msprf24_activate_tx();
 
             /* Stop the main routine and listen for interrupts

@@ -9,8 +9,8 @@
 #define UTILS_H_
 
 #define BUF_SIZE            32
-#define FRAME_DATA_LEN      16
-#define FRAME_NUMBER        3  // 1 + (sizeof(struct Message) - 1) / FRAME_DATA_LEN
+#define PACKET_PAYLOAD_LEN      16
+#define PACKET_NUMBER        3  // 1 + (sizeof(struct Message) - 1) / FRAME_DATA_LEN
 
 #define NRF_CHANNEL         99
 
@@ -19,10 +19,10 @@
 
 #define GMT +3
 
-struct Frame
+struct Packet
 {
     unsigned char index;
-    char data[FRAME_DATA_LEN];
+    char payload[PACKET_PAYLOAD_LEN];
 };
 
 extern void ch_arr_cpy(char *dest, const char *src, int startIndex, int endIndex);

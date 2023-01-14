@@ -8,7 +8,7 @@
 
 #define LED_R BIT0
 
-struct Frame *frame;
+struct Packet *packet;
 uint8_t buf[BUF_SIZE];
 
 void nrfInit(void);
@@ -45,17 +45,17 @@ int main(void)
             r_rx_payload(BUF_SIZE, buf);
             msprf24_irq_clear(RF24_IRQ_RX);
 
-            frame = (struct Frame*) buf;
+            packet = (struct Packet*) buf;
 
             AES_init_ctx_iv(&ctx, key, iv);
-            AES_CBC_decrypt_buffer(&ctx, (uint8_t*) frame->data,
-                                   FRAME_DATA_LEN);
+            AES_CBC_decrypt_buffer(&ctx, (uint8_t*) packet->payload,
+                                   PACKET_PAYLOAD_LEN);
 
             /* Redirect incoming frame to Module 3 without
              * waiting for ACK because no need. There is
              * no public key sharing for encryption.
              */
-            w_tx_payload_noack(BUF_SIZE, (uint8_t*) frame);
+            w_tx_payload_noack(BUF_SIZE, (uint8_t*) packet);
 //            w_tx_payload(BUF_SIZE, (uint8_t*) &frame);
             msprf24_activate_tx();
             msprf24_activate_rx();

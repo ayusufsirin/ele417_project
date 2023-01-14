@@ -17,7 +17,7 @@ struct Message
     struct GPS gps;  // external uart gps module
 };
 
-struct Frame *frame;
+struct Packet *packet;  // Network packet that may contain fragmented payload
 struct Message *msg;
 
 unsigned char msgBuffer[sizeof(struct Message) + 1];  // +1 for null char
@@ -67,15 +67,15 @@ int main(void)
             r_rx_payload(BUF_SIZE, buf);
             msprf24_irq_clear(RF24_IRQ_RX);
 
-            frame = (struct Frame*) buf;
+            packet = (struct Packet*) buf;
 
-            if (frame->index < FRAME_NUMBER)
+            if (packet->index < PACKET_NUMBER)
             {
                 unsigned int i;
-                for (i = 0; i < FRAME_DATA_LEN; i++)
+                for (i = 0; i < PACKET_PAYLOAD_LEN; i++)
                 {
-                    msgBuffer[frame->index * FRAME_DATA_LEN + i] =
-                            frame->data[i];
+                    msgBuffer[packet->index * PACKET_PAYLOAD_LEN + i] =
+                            packet->payload[i];
                 }
 
                 msg = (struct Message*) msgBuffer;
