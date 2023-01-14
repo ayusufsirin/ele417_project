@@ -14,5 +14,6 @@
 extern void serialBegin(int baud);
 extern void serialWrite(char byte);
 extern int serialAvailable(void);
+void serialPrint(char *str);
 
 #endif /* UART_H_ */
