@@ -27,7 +27,6 @@ struct Frame frame;
 struct Message msg;
 
 char *msgBuffer;
-char data[] = "qwertyuiopasdfg";
 
 void nrfInit(void);
 
@@ -57,7 +56,6 @@ int main(void)
             frame.index = fi;
             ch_arr_cpy(frame.data, msgBuffer, fi * FRAME_DATA_LEN,
                        (fi + 1) * FRAME_DATA_LEN);
-//            ch_arr_cpy(frame.data, data, 0, FRAME_DATA_LEN);
 
             AES_init_ctx_iv(&ctx, key, iv);
             AES_CBC_encrypt_buffer(&ctx, (uint8_t*) frame.data, FRAME_DATA_LEN);
