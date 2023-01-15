@@ -1,15 +1,18 @@
+#include <msp430.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
-#include <msp430.h> 
-#include <nrf24l01.h>
-#include <uart.h>
-#include <nmea_gps.h>
+#include "msprf24.h"
+#include "nrf_userconfig.h"
+#include "uart.h"
+#include "nmea_gps.h"
+#include "aes.h"
+#include "utils.h"
 
 #define UART_BAUD           9600
-#define FRAME_DATA_LEN      TX_BUF_LEN - sizeof(unsigned char)
-#define FRAME_NUMBER        3  // 1 + (sizeof(struct Message) - 1) / FRAME_DATA_LEN
+#define LED_R BIT0
 
 struct Message
 {
@@ -17,53 +20,102 @@ struct Message
     struct GPS gps;  // external uart gps module
 };
 
-struct Frame
-{
-    unsigned char index;  // (1 Byte) 0-255 frame numbers
-    char data[FRAME_DATA_LEN];
-};
-
 char gpsBuffer[NMEA_SENT_LEN];
 unsigned int gpsBufferIndex = 0;
 
+struct Packet packet;
 struct Message msg;
-char *msgBuffer;
-struct Frame frame;
 
-// Array manipulation functions
-void ch_arr_cpy(char *dest, const char *src, int startIndex, int endIndex);
+char *msgBuffer;
+
+void nrfInit(void);
 
 int main(void)
 {
     WDTCTL = WDTPW | WDTHOLD;	// stop watchdog timer
 
+    P1DIR |= LED_R;
+    P1OUT &= ~LED_R;
+
+    struct AES_ctx ctx;
+    uint8_t key[] = KEY;
+    uint8_t iv[] = IV;
+
     serialBegin(UART_BAUD);
-    nrfBeginTX();
+    nrfInit();
+    msprf24_standby();
 
     while (1)
     {
         msg.icTemperature = 2.9f;
         msgBuffer = (char*) &msg;
 
-        unsigned char fi;  // frame index (8 bits)
-        for (fi = 0; fi < FRAME_NUMBER; fi++)
+        unsigned char fi;  // frame index
+        for (fi = 0; fi < PACKET_NUMBER; fi++)
         {
-            frame.index = fi;
-            ch_arr_cpy(frame.data, msgBuffer, fi * FRAME_DATA_LEN,
-                       (fi + 1) * FRAME_DATA_LEN - 1);
-            nrfSend((char*) &frame);
-//            _delay_cycles(100000);
+            packet.index = fi;
+            ch_arr_cpy(packet.payload, msgBuffer, fi * PACKET_PAYLOAD_LEN,
+                       (fi + 1) * PACKET_PAYLOAD_LEN);
+
+            AES_init_ctx_iv(&ctx, key, iv);
+            AES_CBC_encrypt_buffer(&ctx, (uint8_t*) packet.payload, PACKET_PAYLOAD_LEN);
+
+            w_tx_payload(BUF_SIZE, (uint8_t*) &packet);  //(uint8_t*) &frame);
+            msprf24_activate_tx();
+
+            /* Stop the main routine and listen for interrupts
+             * and collect the sensor data.
+             */
+            LPM4;  // wait for ACK
+
+            // Indicate if transmission possible
+            if (rf_irq & RF24_IRQ_FLAGGED)
+            {
+                rf_irq &= ~RF24_IRQ_FLAGGED;
+                msprf24_get_irq_reason();
+
+                if (rf_irq & RF24_IRQ_TX)
+                {
+                    P1OUT &= ~LED_R;
+                    flush_tx();
+                }
+                if (rf_irq & RF24_IRQ_TXFAILED)
+                {
+                    P1OUT |= LED_R;
+
+                    /* Retransmit last payload in the case of transmission
+                     * fail to be sure the message is received by PRX.
+                     */
+                    tx_reuse_lastpayload();
+                    pulse_ce();
+                }
+
+                msprf24_irq_clear(rf_irq);
+            }
+
+            _delay_cycles(80000);  // Should be changed to IRQ control
         }
     }
 }
 
-void ch_arr_cpy(char *dest, const char *src, int startIndex, int endIndex)
+void nrfInit(void)
 {
-    unsigned int i;
-    for (i = 0; i < (endIndex - startIndex); i++)
-    {
-        dest[i] = src[i + startIndex];
-    }
+    DCOCTL = CALDCO_1MHZ;
+    BCSCTL1 = CALBC1_1MHZ;
+
+    rf_crc = RF24_EN_CRC | RF24_CRCO;
+    rf_addr_width = 5;
+    rf_speed_power = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
+    rf_channel = (uint8_t) NRF_CHANNEL;;
+
+    msprf24_init();
+    msprf24_set_pipe_packetsize(0, BUF_SIZE);
+    msprf24_open_pipe(0, 1);
+
+    // Address setup
+    uint8_t addr[5] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00 };
+    w_tx_addr(addr);
+    w_rx_addr(0, addr);
 }
 
 #pragma vector = USCIAB0RX_VECTOR
@@ -76,6 +128,12 @@ __interrupt void UART_RX_ISR(void)
         if (memcmp(gpsBuffer, "$GPRMC", 6) == 0)  // check for GPS message_id
         {
             parse(&msg.gps, gpsBuffer);
+
+            /* Trigger to exit low power mode if it is to
+             * prevent deadlock caused cascaded inside LPM
+             * microcontrollers.
+             */
+            LPM4_EXIT;
         }
     }
 

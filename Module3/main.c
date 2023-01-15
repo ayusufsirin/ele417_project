@@ -1,16 +1,15 @@
-#include <stdio.h>
-
 #include <msp430.h>
-#include <hd44780.h>
-#include <nrf24l01.h>
-#include <uart.h>
-#include <nmea_gps.h>
+#include <stdio.h>
+#include <stdint.h>
 
-#define LCD_DB_MASK     (BIT4 + BIT5 + BIT6 + BIT7)  // P1.4 (D4) to P1.7 (D7)
-#define LCD_CTL_MASK    (BIT0 + BIT3)                // P1.6 (E) and P1.7 (RS)
+#include "msprf24.h"
+#include "nrf_userconfig.h"
+#include "hd44780.h"
+#include "uart.h"
+#include "nmea_gps.h"
+#include "utils.h"
 
-#define FRAME_DATA_LEN      TX_BUF_LEN - sizeof(unsigned char)
-#define FRAME_NUMBER        3
+#define UART_BAUD 9600
 
 struct Message
 {
@@ -18,95 +17,125 @@ struct Message
     struct GPS gps;  // external uart gps module
 };
 
-struct Frame
-{
-    unsigned char index;  // 0-255 frame numbers
-    char data[FRAME_DATA_LEN];
-};
-
-struct Frame *frame;
-
+struct Packet *packet;  // Network packet that may contain fragmented payload
 struct Message *msg;
-unsigned char msgBuffer[sizeof(struct Message)];
-unsigned msgBufferIndex = 0;
 
-char lcdStr[32];
+unsigned char msgBuffer[sizeof(struct Message) + 1];  // +1 for null char
+uint8_t buf[BUF_SIZE];
 
-void initLCD(void);
-void ch_arr_cpy(char *dest, const char *src, int startIndex, int endIndex);
+char lcdStr1[17];
+char lcdStr2[40];
+
+void nrfInit(void);
+void lcdInit(void);
+void lcdStrFormat(struct Message *msg);
 
 int main(void)
 {
     WDTCTL = WDTPW | WDTHOLD;	// stop watchdog timer
 
-    serialBegin(9600);
-    nrfBeginRX();
+    serialBegin(UART_BAUD);
+    lcdInit();
+    nrfInit();
 
-    initLCD();
+    if (!(RF24_QUEUE_RXEMPTY & msprf24_queue_state()))
+    {
+        flush_rx();
+    }
+    msprf24_activate_rx();
+
     hd44780_clear_screen();
-
-    unsigned char *payload;
 
     while (1)
     {
-        sprintf(lcdStr, "D:%dT%d La:%d%c Lo:%d%c", (int) msg->gps.date,
-                (int) msg->gps.time, (int) msg->gps.latitude, msg->gps.n_s,
-                (int) msg->gps.longitude, msg->gps.e_w);
-        hd44780_write_string(lcdStr, 1, 1, CR_LF);
+        lcdStrFormat(msg);
+        hd44780_write_string(lcdStr1, 1, 1, NO_CR_LF);
+        hd44780_write_string(lcdStr2, 2, 1, NO_CR_LF);
 
-        payload = nrfReceive();
-        if (nrfAvailable() > 0)
+        msgBuffer[sizeof(struct Message)] = '\0';
+        serialPrint("$");
+        serialPrint((char*) msgBuffer);
+        serialPrint("\r\n");
+
+        if (rf_irq & RF24_IRQ_FLAGGED)
         {
-            frame = (struct Frame*) (payload + TX_BUF_LEN);
+            msprf24_get_irq_reason();
+        }
 
-            unsigned int j;
-            for (j = 0; j < FRAME_DATA_LEN; j++)
+        if (rf_irq & RF24_IRQ_RX)
+        {
+            r_rx_payload(BUF_SIZE, buf);
+            msprf24_irq_clear(RF24_IRQ_RX);
+
+            packet = (struct Packet*) buf;
+
+            if (packet->index < PACKET_NUMBER)
             {
-                msgBuffer[frame->index * FRAME_DATA_LEN + j] = frame->data[j];
-            }
+                unsigned int i;
+                for (i = 0; i < PACKET_PAYLOAD_LEN; i++)
+                {
+                    msgBuffer[packet->index * PACKET_PAYLOAD_LEN + i] =
+                            packet->payload[i];
+                }
 
-            msg = (struct Message*) msgBuffer;
-
-            unsigned int i;
-            for (i = TX_BUF_LEN; i < RX_BUF_LEN; i++)
-            {
-                while (serialAvailable() == 0)
-                    ;
-                serialWrite(payload[i]);
+                msg = (struct Message*) msgBuffer;
             }
         }
     }
 }
 
-void initLCD(void)
+void nrfInit(void)
 {
-    BCSCTL1 = CALBC1_1MHZ;
     DCOCTL = CALDCO_1MHZ;
+    BCSCTL1 = CALBC1_1MHZ;
 
-    P1DIR |= LCD_DB_MASK;
-    P1DIR |= LCD_CTL_MASK;
+    rf_crc = RF24_EN_CRC | RF24_CRCO;
+    rf_addr_width = 5;
+    rf_speed_power = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
+    rf_channel = (uint8_t) NRF_CHANNEL;
 
-    TA0CCR1 = 5000;                   // Set CCR1 value for 32.678 ms interrupt
-    TA0CCTL1 = CCIE;                   // Compare interrupt enable
-    TA0CTL = TASSEL_2 | MC_2 | TACLR;  // SMCLK, Continuous mode
+    msprf24_init();
+    msprf24_set_pipe_packetsize(0, BUF_SIZE);
+    msprf24_open_pipe(0, 1);
 
-    _enable_interrupts();
+    // Address setup
+    uint8_t addr[5] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01 };
+    w_rx_addr(0, addr);
 }
 
-void ch_arr_cpy(char *dest, const char *src, int startIndex, int endIndex)
+void lcdInit(void)
 {
-    unsigned int i;
-    for (i = 0; i < (endIndex - startIndex); i++)
-    {
-        dest[i] = src[i + startIndex];
-    }
+    P1DIR |= BIT0 | BIT3 | BIT4;
+    P2DIR |= BIT3 | BIT4 | BIT5;
+
+    TA0CTL = TASSEL_2 | MC_1 | ID_0 | TACLR;  // ACLK, Up-to-CCR mode
+    TA0CCR0 = 500;
+    TA0CCTL0 = CCIE;  // Compare interrupt enable
+
+    __enable_interrupt();
 }
 
-#pragma vector = TIMER0_A1_VECTOR
-__interrupt void TIMER0_A1_ISR(void)            // Timer 0 A1 interrupt service
+void lcdStrFormat(struct Message *msg)
 {
-    if (TA0IV == 2)  // Determine the interrupt source
-    {
-        hd44780_timer_isr();                       // Call HD44780 state machine
-    }
+    char date[9];
+    char time[7];
+    char latitude[15];
+    char longitude[15];
+
+    date_string(msg->gps.date, date);
+    time_string(msg->gps.time, time);
+    lat_long_string(msg->gps.latitude, latitude);
+    lat_long_string(msg->gps.longitude, longitude);
+
+    sprintf(lcdStr1, "%s   %s", date, time);
+    sprintf(lcdStr2, "%s%c%s%c", latitude, msg->gps.n_s, longitude,
+            msg->gps.e_w);
+}
+
+// Timer_A interrupt service routine for TA0CCR0
+#pragma vector = TIMER0_A0_VECTOR
+__interrupt void Timer_A0(void)
+{
+    hd44780_timer_isr();  // Call HD44780 state machine
+    TA0CCTL0 &= ~CCIFG;  // Clear the interrupt flag
 }

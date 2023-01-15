@@ -17,7 +17,7 @@ void serialBegin(int baud)
     P1SEL2 = TXD | RXD;
 
     UCA0CTL1 |= UCSWRST + UCSSEL_2;
-    UCA0BR0 = 104; // (int) 1000000 / baud;
+    UCA0BR0 = 104;  // (int) 1000000 / baud;
     UCA0BR1 = 0x00;
     UCA0MCTL = UCBRS_2;
     UCA0CTL1 &= ~UCSWRST;
@@ -36,4 +36,14 @@ int serialAvailable(void)
     if ((IFG2 & UCA0TXIFG) != 0)
         return 1;
     return 0;
+}
+
+void serialPrint(char *str)
+{
+    while (*str != '\0')
+    {
+        while (serialAvailable() == 0)
+            ;
+        serialWrite(*str++);
+    }
 }
