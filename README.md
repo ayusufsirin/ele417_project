@@ -1,6 +1,6 @@
 # ELE 417 Embedded System Design: Term Project
 
-:: "Global Positioning System and Monitoring by Ground Station"
+## Global Positioning System and Monitoring by Ground Station
 
 This project is prepared for the term project of the embedded system design lecture for fall term of 2022-2023 year. The subject of this project is "Global Positioning System and Monitoring by Ground Station" as concept.
 
