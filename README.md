@@ -31,3 +31,7 @@ We use the CCS (Code Composer Studio) from Texas Instruments for the whole proje
 
 ## YouTube Link
 https://youtu.be/Ukb2jtB3hIM
+
+## Licence
+
+Open Source license. Everybody can use.
